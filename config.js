@@ -1,7 +1,7 @@
 // ====== ÚNICO ARCHIVO QUE TIENES QUE EDITAR UNA VEZ ======
 const CONFIG = {
   marca: "JS Software",
-  whatsapp: "58XXXXXXXXXX", // tu número con código de país, sin + ni espacios
+  whatsapp: "584128609829", // tu número con código de país, sin + ni espacios
 
   // Pega aquí los datos de Supabase (Project Settings → API).
   // Si los dejas vacíos, la tienda muestra los productos de ejemplo de abajo.
