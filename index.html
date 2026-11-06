@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JS Software | Proyectos de programación y plantillas de Excel</title>
+<meta name="description" content="Compra proyectos de programación, bots y archivos de Excel listos para usar.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="#inicio">JS <span>Software</span></a>
+      <ul>
+        <li><a href="#inicio">Inicio</a></li>
+        <li><a href="#catalogo">Catálogo</a></li>
+        <li><a href="#comprar">Cómo comprar</a></li>
+        <li><a href="#contacto">Contacto</a></li>
+      </ul>
+      <button class="carro" id="abrir">Carrito (<span id="n">0</span>)</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="hero" id="inicio">
+    <h1>Proyectos de programación y archivos de Excel, listos para usar</h1>
+    <p>Elige lo que necesitas, agrégalo al carrito y envía tu pedido por WhatsApp. Si quieres algo a tu medida, también lo hago.</p>
+    <a class="btn" href="#catalogo">Ver catálogo</a>
+  </div>
+
+  <section id="catalogo">
+    <h2>Catálogo</h2>
+    <p class="sub">Toca "Agregar al carrito" en todo lo que quieras llevar.</p>
+    <div class="chips" id="chips"></div>
+    <div class="grid" id="lista"><p class="sub">Cargando…</p></div>
+  </section>
+
+  <section id="comprar">
+    <h2>Cómo comprar</h2>
+    <p class="sub">Sin registros ni cuentas.</p>
+    <ol class="pasos">
+      <li><b>Arma tu carrito</b><span>Elige los archivos, bots o scripts que quieras.</span></li>
+      <li><b>Envía el pedido</b><span>Se abre WhatsApp con tu lista y el total ya escritos.</span></li>
+      <li><b>Paga y recibe</b><span>Te indico los métodos de pago y te envío todo por WhatsApp.</span></li>
+    </ol>
+  </section>
+
+  <section id="contacto">
+    <h2>Contacto</h2>
+    <p class="sub">¿Dudas o un proyecto a tu medida? Escríbeme.</p>
+    <a class="btn" data-wa="Hola, tengo una consulta" target="_blank" rel="noopener">Escribir a JS Software</a>
+  </section>
+</main>
+
+<footer>© 2026 JS Software · Código y Excel listos para usar</footer>
+
+<a class="wa" data-wa="Hola, vi su página y quiero más información" target="_blank" rel="noopener">WhatsApp</a>
+
+<aside id="panel" aria-label="Carrito">
+  <header><h2>Tu carrito</h2><button id="cerrar" aria-label="Cerrar">✕</button></header>
+  <ul id="items"></ul>
+  <div class="tot"><span>Total</span><span id="total">$0</span></div>
+  <input id="cliente" placeholder="Tu nombre (opcional)" autocomplete="name">
+  <button class="btn" id="pedir" disabled>Enviar pedido por WhatsApp</button>
+</aside>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const dinero = n => '$' + Number(n);
+const db = CONFIG.supabaseUrl ? supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey) : null;
+let productos = [], filtro = 'Todos', carrito = [];
+try { carrito = JSON.parse(localStorage.getItem('carrito') || '[]'); } catch (e) {}
+const guardar = () => { try { localStorage.setItem('carrito', JSON.stringify(carrito)); } catch (e) {} };
+const enCarrito = () => carrito.map(id => productos.find(p => p.id === id)).filter(Boolean);
+
+// Enlaces de WhatsApp con el número de config.js
+document.querySelectorAll('[data-wa]').forEach(a => {
+  a.href = 'https://wa.me/' + CONFIG.whatsapp + '?text=' + encodeURIComponent(a.dataset.wa);
+});
+
+async function cargar() {
+  if (db) {
+    const { data, error } = await db.from('productos').select('*').eq('activo', true).order('categoria').order('nombre');
+    productos = error ? [] : data;
+  } else productos = CONFIG.demo;
+  carrito = carrito.filter(id => productos.some(p => p.id === id));
+  pintar();
+}
+
+function pintar() {
+  const cats = ['Todos', ...new Set(productos.map(p => p.categoria))];
+  $('#chips').innerHTML = cats.map(c => `<button class="chip${c === filtro ? ' on' : ''}" data-c="${esc(c)}">${esc(c)}</button>`).join('');
+  const lista = productos.filter(p => filtro === 'Todos' || p.categoria === filtro);
+  $('#lista').innerHTML = lista.length ? lista.map(p => {
+    const dentro = carrito.includes(p.id);
+    return `<article class="card ${/excel/i.test(p.categoria) ? 'excel' : 'codigo'}">
+      <span class="tipo">${esc(p.categoria)}</span><h3>${esc(p.nombre)}</h3><p>${esc(p.descripcion)}</p>
+      <div class="precio">${dinero(p.precio)} <small>USD</small></div>
+      <button class="btn${dentro ? ' sec' : ''}" data-id="${p.id}">${dentro ? 'Quitar del carrito' : 'Agregar al carrito'}</button></article>`;
+  }).join('') : '<p class="sub">Aún no hay productos.</p>';
+  const items = enCarrito();
+  $('#n').textContent = items.length;
+  $('#items').innerHTML = items.length
+    ? items.map(p => `<li><span>${esc(p.nombre)}</span><b>${dinero(p.precio)}</b><button data-q="${p.id}" aria-label="Quitar ${esc(p.nombre)}">✕</button></li>`).join('')
+    : '<li class="vacio">Tu carrito está vacío.</li>';
+  $('#total').textContent = dinero(items.reduce((s, p) => s + Number(p.precio), 0));
+  $('#pedir').disabled = !items.length;
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-c],[data-id],[data-q]');
+  if (!t) return;
+  if (t.dataset.c) { filtro = t.dataset.c; return pintar(); }
+  const id = Number(t.dataset.id || t.dataset.q);
+  carrito = carrito.includes(id) ? carrito.filter(x => x !== id) : [...carrito, id];
+  guardar(); pintar();
+});
+$('#abrir').onclick = () => $('#panel').classList.add('abierto');
+$('#cerrar').onclick = () => $('#panel').classList.remove('abierto');
+
+$('#pedir').onclick = async () => {
+  const items = enCarrito(), cliente = $('#cliente').value.trim();
+  const total = items.reduce((s, p) => s + Number(p.precio), 0);
+  const texto = `Hola ${CONFIG.marca}, quiero comprar:\n` + items.map(p => `• ${p.nombre} (${dinero(p.precio)})`).join('\n')
+    + `\nTotal: ${dinero(total)} USD` + (cliente ? `\nMi nombre: ${cliente}` : '');
+  if (db) { // guarda el pedido en tu historial (no bloquea si falla)
+    try {
+      await Promise.race([
+        db.from('pedidos').insert({ cliente, items: items.map(p => ({ nombre: p.nombre, precio: p.precio })), total }),
+        new Promise(r => setTimeout(r, 2000))
+      ]);
+    } catch (e) {}
+  }
+  location.href = 'https://wa.me/' + CONFIG.whatsapp + '?text=' + encodeURIComponent(texto);
+};
+
+cargar();
+</script>
+</body>
+</html>

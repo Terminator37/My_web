@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Panel | JS Software</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap adm">
+
+  <div id="aviso" hidden><h2>Falta configurar</h2><p class="sub">Pega tu URL y tu clave de Supabase en config.js.</p></div>
+
+  <section id="login" hidden style="border:0">
+    <h2>Entrar al panel</h2>
+    <p class="sub">Solo para el dueño de la tienda.</p>
+    <form id="fl">
+      <label for="em">Correo</label><input id="em" type="email" required autocomplete="username">
+      <label for="pw">Contraseña</label><input id="pw" type="password" required autocomplete="current-password">
+      <p class="err" id="err"></p>
+      <button class="btn">Entrar</button>
+    </form>
+  </section>
+
+  <div id="admin" hidden>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h2>Panel de JS Software</h2>
+      <span><a href="index.html">Ver tienda</a> · <button id="salir" class="chip">Salir</button></span>
+    </div>
+
+    <h3 id="titulo" style="margin-top:16px">Agregar producto</h3>
+    <form id="fp">
+      <label for="nom">Nombre</label><input id="nom" required>
+      <label for="cat">Categoría (Excel, Bots, Scripts…)</label><input id="cat" list="cats" required>
+      <datalist id="cats"></datalist>
+      <label for="des">Descripción</label><textarea id="des" rows="2"></textarea>
+      <label for="pre">Precio en USD</label><input id="pre" type="number" min="0" step="0.01" required>
+      <button class="btn" id="guardar">Guardar producto</button>
+      <button type="button" class="btn sec" id="cancelar" hidden style="margin-top:8px">Cancelar edición</button>
+    </form>
+
+    <h3>Mis productos</h3>
+    <ul id="prods" style="margin-top:10px"></ul>
+
+    <h3 style="margin-top:26px">Pedidos recientes</h3>
+    <ul id="peds" style="margin-top:10px"></ul>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+if (!CONFIG.supabaseUrl) { $('#aviso').hidden = false; }
+else {
+  const db = supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey);
+  let editando = null, lista = [];
+
+  const mostrar = ok => {
+    $('#login').hidden = ok; $('#admin').hidden = !ok;
+    if (ok) { cargarProductos(); cargarPedidos(); }
+  };
+  db.auth.getSession().then(({ data }) => mostrar(!!data.session));
+
+  $('#fl').onsubmit = async e => {
+    e.preventDefault();
+    const { error } = await db.auth.signInWithPassword({ email: $('#em').value, password: $('#pw').value });
+    if (error) $('#err').textContent = 'Correo o contraseña incorrectos.'; else mostrar(true);
+  };
+  $('#salir').onclick = async () => { await db.auth.signOut(); mostrar(false); };
+
+  async function cargarProductos() {
+    const { data } = await db.from('productos').select('*').order('categoria').order('nombre');
+    lista = data || [];
+    $('#prods').innerHTML = lista.map(p => `<li class="${p.activo ? '' : 'oculto'}">
+      <div><b>${esc(p.nombre)}</b><br><small>${esc(p.categoria)} · $${p.precio}${p.activo ? '' : ' · oculto'}</small></div>
+      <span><button data-e="${p.id}">Editar</button><button data-v="${p.id}">${p.activo ? 'Ocultar' : 'Mostrar'}</button><button data-d="${p.id}" class="peligro">Borrar</button></span></li>`).join('')
+      || '<li>Aún no hay productos. Agrega el primero arriba.</li>';
+    $('#cats').innerHTML = [...new Set(lista.map(p => p.categoria))].map(c => `<option value="${esc(c)}">`).join('');
+  }
+
+  async function cargarPedidos() {
+    const { data } = await db.from('pedidos').select('*').order('creado', { ascending: false }).limit(50);
+    $('#peds').innerHTML = (data || []).map(o => `<li><b>${new Date(o.creado).toLocaleString('es-VE')}</b> — ${esc(o.cliente || 'Sin nombre')}<br>${o.items.map(i => esc(i.nombre)).join(', ')}<br><b>Total: $${o.total}</b></li>`).join('')
+      || '<li>Aún no hay pedidos.</li>';
+  }
+
+  const limpiar = () => { $('#fp').reset(); editando = null; $('#titulo').textContent = 'Agregar producto'; $('#cancelar').hidden = true; };
+  $('#cancelar').onclick = limpiar;
+
+  $('#fp').onsubmit = async e => {
+    e.preventDefault();
+    const f = { nombre: $('#nom').value.trim(), categoria: $('#cat').value.trim() || 'General', descripcion: $('#des').value.trim(), precio: Number($('#pre').value) };
+    const r = editando ? await db.from('productos').update(f).eq('id', editando) : await db.from('productos').insert(f);
+    if (r.error) return alert('Error: ' + r.error.message);
+    limpiar(); cargarProductos();
+  };
+
+  $('#prods').onclick = async e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.e) {
+      const p = lista.find(x => x.id == b.dataset.e); editando = p.id;
+      $('#nom').value = p.nombre; $('#cat').value = p.categoria; $('#des').value = p.descripcion || ''; $('#pre').value = p.precio;
+      $('#titulo').textContent = 'Editando: ' + p.nombre; $('#cancelar').hidden = false; scrollTo({ top: 0 });
+    } else if (b.dataset.v) {
+      const p = lista.find(x => x.id == b.dataset.v);
+      await db.from('productos').update({ activo: !p.activo }).eq('id', p.id); cargarProductos();
+    } else if (b.dataset.d && confirm('¿Borrar este producto para siempre?')) {
+      await db.from('productos').delete().eq('id', b.dataset.d); cargarProductos();
+    }
+  };
+}
+</script>
+</body>
+</html>
